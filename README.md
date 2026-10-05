@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Secure Cloud-Based Competitive Examination Question Paper Management System
 
-## Getting Started
+A highly secure, cloud-based platform for managing the entire lifecycle of competitive examination question papers. Designed to prevent unauthorized access, unauthorized modifications, insider leakage, compromised accounts, and premature access.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Strict Role-Based Access Control (RBAC):** Roles include Super Admin, Exam Controller, Question Setter, Reviewer, and Security Auditor. Segregation of duties is strictly enforced.
+- **End-to-End Encryption:** Question papers are encrypted using AES-256-GCM. Plaintext papers are never permanently stored in the database.
+- **Digital Signatures:** Finalized question papers are signed with ECDSA (P-256) to ensure non-repudiation and prevent tampering.
+- **Integrity Validation:** SHA-256 hashes detect any unauthorized modification of stored data.
+- **Multi-Factor Authentication (MFA):** Mandatory TOTP-based 2FA for all users.
+- **Immutable Audit Logging:** Every system action, authentication attempt, and data access is securely logged.
+- **Time-Gated Release Mechanism:** Server-side enforcement prevents downloading question papers even a millisecond before the scheduled release time.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Framework:** Next.js 16 (App Router, Server Actions)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS (Glassmorphism & Cyber-security theme)
+- **Database:** Neon PostgreSQL (Serverless)
+- **ORM:** Prisma
+- **Cryptography:** Node.js Crypto, `jose`
+- **Authentication:** Custom Session-based auth with `bcryptjs` and `otpauth`
+- **Validation:** Zod
+- **Testing:** Vitest, React Testing Library
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Quick Start
 
-## Learn More
+1. Install dependencies: `npm install`
+2. Set up environment variables in `.env`
+3. Generate Prisma client: `npx prisma generate`
+4. Run migrations: `npx prisma db push`
+5. Start development server: `npm run dev`
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for hosting instructions on Vercel and Neon.

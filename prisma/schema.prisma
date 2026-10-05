@@ -1,0 +1,376 @@
+// Prisma Schema for Secure Question Paper Management System
+// Database: Neon PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  EXAM_CONTROLLER
+  QUESTION_SETTER
+  REVIEWER
+  SECURITY_AUDITOR
+}
+
+enum PaperStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  FINALIZED
+  SCHEDULED
+  RELEASED
+}
+
+enum ApprovalAction {
+  APPROVED
+  REJECTED
+}
+
+enum SecuritySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AuditAction {
+  LOGIN
+  FAILED_LOGIN
+  LOGOUT
+  MFA_SETUP
+  MFA_VERIFY
+  MFA_FAILURE
+  PAPER_CREATE
+  PAPER_UPLOAD
+  PAPER_ENCRYPT
+  PAPER_SUBMIT
+  PAPER_VIEW
+  PAPER_APPROVE
+  PAPER_REJECT
+  PAPER_FINALIZE
+  PAPER_SCHEDULE
+  PAPER_RELEASE
+  PAPER_DOWNLOAD
+  PAPER_DECRYPT
+  PAPER_SIGN
+  INTEGRITY_CHECK
+  INTEGRITY_FAILURE
+  UNAUTHORIZED_ACCESS
+  PERMISSION_DENIED
+  EARLY_RELEASE_ATTEMPT
+  USER_CREATE
+  USER_UPDATE
+  USER_DELETE
+  ROLE_CHANGE
+  ACCOUNT_LOCKOUT
+  ACCOUNT_UNLOCK
+  PASSWORD_CHANGE
+  SESSION_EXPIRE
+  RELEASE_ATTEMPT
+  DOWNLOAD_ATTEMPT
+}
+
+// ============================================================
+// USER & AUTH MODELS
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  passwordHash  String    @map("password_hash")
+  role          UserRole
+  isActive      Boolean   @default(true) @map("is_active")
+  isLocked      Boolean   @default(false) @map("is_locked")
+  lockedAt      DateTime? @map("locked_at")
+  failedLogins  Int       @default(0) @map("failed_logins")
+  lastLoginAt   DateTime? @map("last_login_at")
+  lastLoginIp   String?   @map("last_login_ip")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  mfaConfig           MFAConfiguration?
+  sessions            Session[]
+  loginAttempts       LoginAttempt[]
+  createdPapers       QuestionPaper[]      @relation("PaperCreator")
+  reviewAssignments   ReviewAssignment[]
+  approvals           Approval[]
+  auditLogs           AuditLog[]
+  securityEvents      SecurityEvent[]
+  setterAssignments   ExamAssignment[]     @relation("SetterAssignment")
+  reviewerAssignments ExamAssignment[]     @relation("ReviewerAssignment")
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model MFAConfiguration {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  secret    String   // Encrypted TOTP secret
+  isEnabled Boolean  @default(false) @map("is_enabled")
+  backupCodes String[] @map("backup_codes") // Hashed backup codes
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("mfa_configurations")
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  email     String
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  success   Boolean
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([email])
+  @@index([ipAddress])
+  @@index([createdAt])
+  @@map("login_attempts")
+}
+
+// ============================================================
+// EXAMINATION MODELS
+// ============================================================
+
+model Examination {
+  id              String   @id @default(cuid())
+  name            String
+  code            String   @unique
+  description     String?
+  subject         String
+  examDate        DateTime @map("exam_date")
+  duration        Int      // in minutes
+  totalMarks      Int      @map("total_marks")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdById     String   @map("created_by_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  papers      QuestionPaper[]
+  assignments ExamAssignment[]
+
+  @@index([code])
+  @@index([examDate])
+  @@index([isActive])
+  @@map("examinations")
+}
+
+model ExamAssignment {
+  id            String   @id @default(cuid())
+  examinationId String   @map("examination_id")
+  setterId      String?  @map("setter_id")
+  reviewerId    String?  @map("reviewer_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  examination Examination @relation(fields: [examinationId], references: [id], onDelete: Cascade)
+  setter      User?       @relation("SetterAssignment", fields: [setterId], references: [id], onDelete: SetNull)
+  reviewer    User?       @relation("ReviewerAssignment", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@unique([examinationId, setterId])
+  @@index([examinationId])
+  @@index([setterId])
+  @@index([reviewerId])
+  @@map("exam_assignments")
+}
+
+// ============================================================
+// QUESTION PAPER MODELS
+// ============================================================
+
+model QuestionPaper {
+  id               String      @id @default(cuid())
+  examinationId    String      @map("examination_id")
+  title            String
+  status           PaperStatus @default(DRAFT)
+  currentVersion   Int         @default(1) @map("current_version")
+  createdById      String      @map("created_by_id")
+  finalizedById    String?     @map("finalized_by_id")
+  finalizedAt      DateTime?   @map("finalized_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  examination     Examination          @relation(fields: [examinationId], references: [id], onDelete: Cascade)
+  createdBy       User                 @relation("PaperCreator", fields: [createdById], references: [id])
+  versions        QuestionPaperVersion[]
+  approvals       Approval[]
+  releaseSchedule ReleaseSchedule?
+  reviewAssignments ReviewAssignment[]
+
+  @@index([examinationId])
+  @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
+  @@map("question_papers")
+}
+
+model QuestionPaperVersion {
+  id                String   @id @default(cuid())
+  paperId           String   @map("paper_id")
+  version           Int
+  encryptedData     Bytes    @map("encrypted_data")
+  iv                String   // Base64-encoded IV/nonce
+  authTag           String   @map("auth_tag") // Base64-encoded GCM auth tag
+  sha256Hash        String   @map("sha256_hash")
+  encryptionVersion String   @default("aes-256-gcm-v1") @map("encryption_version")
+  originalFilename  String   @map("original_filename")
+  mimeType          String   @default("application/pdf") @map("mime_type")
+  fileSize          Int      @map("file_size")
+  digitalSignature  String?  @map("digital_signature")
+  signedById        String?  @map("signed_by_id")
+  signedAt          DateTime? @map("signed_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  paper QuestionPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@unique([paperId, version])
+  @@index([paperId])
+  @@index([sha256Hash])
+  @@map("question_paper_versions")
+}
+
+model ReviewAssignment {
+  id         String   @id @default(cuid())
+  paperId    String   @map("paper_id")
+  reviewerId String   @map("reviewer_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  paper    QuestionPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  reviewer User          @relation(fields: [reviewerId], references: [id])
+
+  @@unique([paperId, reviewerId])
+  @@index([paperId])
+  @@index([reviewerId])
+  @@map("review_assignments")
+}
+
+// ============================================================
+// APPROVAL & RELEASE MODELS
+// ============================================================
+
+model Approval {
+  id        String         @id @default(cuid())
+  paperId   String         @map("paper_id")
+  userId    String         @map("user_id")
+  action    ApprovalAction
+  comments  String?
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  paper QuestionPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  user  User          @relation(fields: [userId], references: [id])
+
+  @@index([paperId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("approvals")
+}
+
+model ReleaseSchedule {
+  id             String    @id @default(cuid())
+  paperId        String    @unique @map("paper_id")
+  scheduledDate  DateTime  @map("scheduled_date")
+  releaseTime    DateTime  @map("release_time")
+  isReleased     Boolean   @default(false) @map("is_released")
+  releasedAt     DateTime? @map("released_at")
+  releasedById   String?   @map("released_by_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  paper QuestionPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledDate])
+  @@index([releaseTime])
+  @@index([isReleased])
+  @@map("release_schedules")
+}
+
+// ============================================================
+// AUDIT & SECURITY MODELS
+// ============================================================
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String?     @map("user_id")
+  userRole  UserRole?   @map("user_role")
+  action    AuditAction
+  resource  String?
+  resourceId String?    @map("resource_id")
+  ipAddress String?     @map("ip_address")
+  userAgent String?     @map("user_agent")
+  success   Boolean
+  details   String?
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([resource])
+  @@index([success])
+  @@map("audit_logs")
+}
+
+model SecurityEvent {
+  id          String           @id @default(cuid())
+  userId      String?          @map("user_id")
+  severity    SecuritySeverity
+  eventType   String           @map("event_type")
+  description String
+  ipAddress   String?          @map("ip_address")
+  metadata    String?          // JSON string for additional data
+  isResolved  Boolean          @default(false) @map("is_resolved")
+  resolvedAt  DateTime?        @map("resolved_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([severity])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([isResolved])
+  @@map("security_events")
+}
